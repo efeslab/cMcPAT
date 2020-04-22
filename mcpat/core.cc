@@ -532,6 +532,12 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
     		data = int((ceil((coredynp.instruction_length+2*(coredynp.phy_ireg_width - coredynp.arch_ireg_width))/2.0)/8.0));
 	        //Data width being divided by 2 means only after both operands available the whole data will be read out.
 	        //This is modeled using two equivalent readouts with half of the data width
+
+        /* for dolma evaluation: dolma needs to add 1 bit in the data field of instruction issue queue */
+        if (XML->sys.dolma) {
+          data += 1;
+        }
+
     		tmp_name = "InstIssueQueue";
     	}
     	else
@@ -544,6 +550,11 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
 	        //Data width being divided by 2 means only after both operands available the whole data will be read out.
 	        //This is modeled using two equivalent readouts with half of the data width
 
+          /* for dolma evaluation: dolma needs to add 1 bit in the data field of instruction issue queue */
+          if (XML->sys.dolma) {
+            data += 1;
+          }
+
 	        tmp_name = "IntReservationStation";
     	}
     	interface_ip.is_cache			 = true;
@@ -551,6 +562,12 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
     	interface_ip.pure_ram            = false;
     	interface_ip.line_sz             = data;
     	interface_ip.cache_sz            = data*XML->sys.core[ithCore].instruction_window_size;
+
+      /* for dolma evaluation: dolma needs a copy of instruction issue queue */
+      if (XML->sys.dolma) {
+        interface_ip.cache_sz *= 2;
+      }
+
     	interface_ip.assoc               = 0;
     	interface_ip.nbanks              = 1;
     	interface_ip.out_w               = interface_ip.line_sz*8;
@@ -577,6 +594,12 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
     	{
     		tag	 = 2*coredynp.phy_freg_width;// TODO: each time only half of the tag is compared
     		data = int(ceil((coredynp.instruction_length+2*(coredynp.phy_freg_width - coredynp.arch_freg_width))/8.0));
+
+        /* for dolma evaluation: dolma needs to add 1 bit in the data field of instruction issue queue */
+        if (XML->sys.dolma) {
+          data += 1;
+        }
+
     		tmp_name = "FPIssueQueue";
     	}
     	else
@@ -584,6 +607,12 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
 	        tag	  = 2*coredynp.phy_ireg_width;
 	        data  = int(ceil((coredynp.instruction_length+2*(coredynp.phy_freg_width - coredynp.arch_freg_width)+
 	        		2*coredynp.fp_data_width)/8.0));
+          /* for dolma evaluation: dolma needs to add 1 bit in the data field of instruction issue queue */
+
+          if (XML->sys.dolma) {
+            data += 1;
+          }
+
 	        tmp_name = "FPReservationStation";
     	}
     	interface_ip.is_cache			 = true;
@@ -591,6 +620,12 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
     	interface_ip.pure_ram            = false;
     	interface_ip.line_sz             = data;
     	interface_ip.cache_sz            = data*XML->sys.core[ithCore].fp_instruction_window_size;
+
+      /* for dolma evaluation: dolma needs a copy of instruction issue queue */
+      if (XML->sys.dolma) {
+        interface_ip.cache_sz *= 2;
+      }
+
     	interface_ip.assoc               = 0;
     	interface_ip.nbanks              = 1;
     	interface_ip.out_w               = interface_ip.line_sz*8;
@@ -631,8 +666,7 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
 			int robExtra = int(ceil(5 + log2(coredynp.num_hthreads)));
       /* for dolma evaluation, dolma adds 4+log_2(NUM_ROB_ENTRIES) bits to each ROB entry */
       if (XML->sys.dolma == 1) {
-        robExtra += (4 + log2(XML->sys.core[ithCore].ROB_size));
-        cout << "dolma!\n";
+        robExtra += int(ceil(4 + log2(XML->sys.core[ithCore].ROB_size)));
       }
 			data = int(ceil((robExtra+coredynp.pc_width + ((coredynp.rm_ty ==RAMbased)? (coredynp.phy_ireg_width + coredynp.phy_freg_width) : fmax(coredynp.phy_ireg_width, coredynp.phy_freg_width)) + ((coredynp.scheu_ty==PhysicalRegFile)? 0 :  coredynp.fp_data_width ))/8.0));
 			/*
