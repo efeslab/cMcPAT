@@ -593,6 +593,11 @@ typedef struct{
 	system_mc flashc;
 	system_niu niu;
 	system_pcie pcie;
+
+  // support for dolma power evaluation
+  // 0: normal mode
+  // 1: with dolma protection
+  int dolma;
 } root_system;
 
 class ParseXML

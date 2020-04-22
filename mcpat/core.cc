@@ -629,6 +629,11 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
 			 */
 
 			int robExtra = int(ceil(5 + log2(coredynp.num_hthreads)));
+      /* for dolma evaluation, dolma adds 4+log_2(NUM_ROB_ENTRIES) bits to each ROB entry */
+      if (XML->sys.dolma == 1) {
+        robExtra += (4 + log2(XML->sys.core[ithCore].ROB_size));
+        cout << "dolma!\n";
+      }
 			data = int(ceil((robExtra+coredynp.pc_width + ((coredynp.rm_ty ==RAMbased)? (coredynp.phy_ireg_width + coredynp.phy_freg_width) : fmax(coredynp.phy_ireg_width, coredynp.phy_freg_width)) + ((coredynp.scheu_ty==PhysicalRegFile)? 0 :  coredynp.fp_data_width ))/8.0));
 			/*
 			 * 	5 bits are: busy, Issued, Finished, speculative, valid;
