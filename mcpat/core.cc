@@ -1187,7 +1187,7 @@ RegFU::RegFU(ParseXML* XML_interface, int ithCore_, InputParameter* interface_ip
       interface_ip.is_cache			 = false;
       interface_ip.pure_cam            = false;
       interface_ip.pure_ram            = true;
-      interface_ip.line_sz             = int(ceil(data/32.0))*4;
+      interface_ip.line_sz             = int(ceil(data/8.0));
       interface_ip.cache_sz            = interface_ip.line_sz * 1;
       interface_ip.assoc               = 1;
       interface_ip.nbanks              = 1;
@@ -3700,13 +3700,9 @@ void RegFU::computeEnergy(bool is_tdp)
       // stt only
       for (int i = 0; i < nalus; i++) {
         // assume accesses are equally distributed into all ALUs
-        // Jiacheng guesses that there's no 1.1, and he then copied everything from IRF.
-        // He also assumes that accesses are evenly distributed to each ALU.
-        // anyway do we care about tdp?
-        stt_extrabit_alu[i]->stats_t.readAc.access = coredynp.issueW*2*(coredynp.ALU_duty_cycle+
-    			(coredynp.num_muls>0?coredynp.MUL_duty_cycle:0))*coredynp.num_pipelines/nalus;
-        stt_extrabit_alu[i]->stats_t.writeAc.access = coredynp.issueW*2*(coredynp.ALU_duty_cycle+
-    			(coredynp.num_muls>0?coredynp.MUL_duty_cycle:0))*coredynp.num_pipelines/nalus;
+        // at each cycle, there can be at most 1 access to each ALU, and each access brings 1 read and 1 write
+        stt_extrabit_alu[i]->stats_t.readAc.access = 1;
+        stt_extrabit_alu[i]->stats_t.writeAc.access = 1;
         stt_extrabit_alu[i]->tdp_stats = stt_extrabit_alu[i]->stats_t;
       }
      }
@@ -3789,9 +3785,7 @@ void RegFU::computeEnergy(bool is_tdp)
 	{
 		IRF->rt_power  =  IRF->power_t + ((coredynp.scheu_ty==ReservationStation) ? (IRF->local_result.power *coredynp.pppm_lkg_multhread):IRF->local_result.power);
 		FRF->rt_power  =  FRF->power_t + ((coredynp.scheu_ty==ReservationStation) ? (FRF->local_result.power *coredynp.pppm_lkg_multhread):FRF->local_result.power);
-    // actually Jiacheng really believe this line is wrong, so he changed it...
-		// rt_power	   =  rt_power + (IRF->power_t + FRF->power_t);
-		rt_power	   =  rt_power + (IRF->rt_power + FRF->rt_power);
+		rt_power	   =  rt_power + (IRF->power_t + FRF->power_t);
 		if (coredynp.regWindowing)
 		{
 			RFWIN->rt_power = RFWIN->power_t + RFWIN->local_result.power *pppm_lkg;
