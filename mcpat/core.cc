@@ -527,33 +527,38 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
     	if(coredynp.scheu_ty==PhysicalRegFile)
     	{
     		tag	 = coredynp.phy_ireg_width;
-    		// Each time only half of the tag is compared, but two tag should be stored.
-    		// This underestimate the search power
-    		data = int((ceil((coredynp.instruction_length+2*(coredynp.phy_ireg_width - coredynp.arch_ireg_width))/2.0)/8.0));
-	        //Data width being divided by 2 means only after both operands available the whole data will be read out.
-	        //This is modeled using two equivalent readouts with half of the data width
 
         /* for dolma evaluation: dolma needs to add 1 bit in the data field of instruction issue queue */
+        int dolma_bit = 0;
         if (XML->sys.dolma) {
-          data += 1;
+          dolma_bit = 1 + ceil(log2(XML->sys.core[ithCore].ROB_size));
         }
+
+    		// Each time only half of the tag is compared, but two tag should be stored.
+    		// This underestimate the search power
+    		data = int(ceil(((coredynp.instruction_length+2*(coredynp.phy_ireg_width - coredynp.arch_ireg_width))/2.0 + dolma_bit)/8.0));
+	        //Data width being divided by 2 means only after both operands available the whole data will be read out.
+	        //This is modeled using two equivalent readouts with half of the data width
 
     		tmp_name = "InstIssueQueue";
     	}
     	else
     	{
 	        tag	  = coredynp.phy_ireg_width;
+
+          /* for dolma evaluation: dolma needs to add 1 bit in the data field of instruction issue queue */
+          int dolma_bit = 0;
+          if (XML->sys.dolma) {
+            dolma_bit = 1 + ceil(log2(XML->sys.core[ithCore].ROB_size));
+          }
+
     		// Each time only half of the tag is compared, but two tag should be stored.
     		// This underestimate the search power
 	        data  = int(ceil(((coredynp.instruction_length+2*(coredynp.phy_ireg_width - coredynp.arch_ireg_width)+
-	        		2*coredynp.int_data_width)/2.0)/8.0));
+	        		2*coredynp.int_data_width)/2.0 + dolma_bit)/8.0));
 	        //Data width being divided by 2 means only after both operands available the whole data will be read out.
 	        //This is modeled using two equivalent readouts with half of the data width
 
-          /* for dolma evaluation: dolma needs to add 1 bit in the data field of instruction issue queue */
-          if (XML->sys.dolma) {
-            data += 1;
-          }
 
 	        tmp_name = "IntReservationStation";
     	}
@@ -593,25 +598,30 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
     	if(coredynp.scheu_ty==PhysicalRegFile)
     	{
     		tag	 = 2*coredynp.phy_freg_width;// TODO: each time only half of the tag is compared
-    		data = int(ceil((coredynp.instruction_length+2*(coredynp.phy_freg_width - coredynp.arch_freg_width))/8.0));
 
         /* for dolma evaluation: dolma needs to add 1 bit in the data field of instruction issue queue */
+        int dolma_bit = 0;
         if (XML->sys.dolma) {
-          data += 1;
+          dolma_bit = 2;
         }
+
+    		data = int(ceil((coredynp.instruction_length+2*(coredynp.phy_freg_width - coredynp.arch_freg_width) + dolma_bit)/8.0));
+
 
     		tmp_name = "FPIssueQueue";
     	}
     	else
     	{
 	        tag	  = 2*coredynp.phy_ireg_width;
-	        data  = int(ceil((coredynp.instruction_length+2*(coredynp.phy_freg_width - coredynp.arch_freg_width)+
-	        		2*coredynp.fp_data_width)/8.0));
-          /* for dolma evaluation: dolma needs to add 1 bit in the data field of instruction issue queue */
 
+          /* for dolma evaluation: dolma needs to add 1 bit in the data field of instruction issue queue */
+          int dolma_bit = 0;
           if (XML->sys.dolma) {
-            data += 1;
+            dolma_bit = 2;
           }
+
+	        data  = int(ceil((coredynp.instruction_length+2*(coredynp.phy_freg_width - coredynp.arch_freg_width)+
+	        		2*coredynp.fp_data_width + dolma_bit)/8.0));
 
 	        tmp_name = "FPReservationStation";
     	}
@@ -665,8 +675,9 @@ SchedulerU::SchedulerU(ParseXML* XML_interface, int ithCore_, InputParameter* in
 
 			int robExtra = int(ceil(5 + log2(coredynp.num_hthreads)));
       /* for dolma evaluation, dolma adds 4+log_2(NUM_ROB_ENTRIES) bits to each ROB entry */
-      if (XML->sys.dolma == 1) {
-        robExtra += int(ceil(4 + log2(XML->sys.core[ithCore].ROB_size)));
+      if (XML->sys.dolma == 1 || XML->sys.stt == 1) {
+        //robExtra += int(ceil(4 + log2(XML->sys.core[ithCore].ROB_size)));
+        robExtra += 1;
       }
 			data = int(ceil((robExtra+coredynp.pc_width + ((coredynp.rm_ty ==RAMbased)? (coredynp.phy_ireg_width + coredynp.phy_freg_width) : fmax(coredynp.phy_ireg_width, coredynp.phy_freg_width)) + ((coredynp.scheu_ty==PhysicalRegFile)? 0 :  coredynp.fp_data_width ))/8.0));
 			/*
@@ -916,6 +927,17 @@ LoadStoreU::LoadStoreU(ParseXML* XML_interface, int ithCore_, InputParameter* in
 	   */
 	  tag							   = ldst_opcode+XML->sys.virtual_address_width +int(ceil(log2(XML->sys.core[ithCore].number_hardware_threads))) + EXTRA_TAG_BITS;
 	  data							   = XML->sys.machine_bits;
+
+    // add stt support...
+    // stt assumes a unified LSQ, so here we combine the size
+    if (XML->sys.stt) {
+      data += log2(XML->sys.core[ithCore].ROB_size); // YRoT
+      data += 1; // PendingSquash
+      data += log2(XML->sys.core[ithCore].ROB_size); // YRoT_impSquash
+    } else if (XML->sys.dolma) {
+      data += log2(XML->sys.core[ithCore].ROB_size);
+    }
+
 	  interface_ip.is_cache			   = true;
 	  interface_ip.line_sz             = int(ceil(data/32.0))*4;
 	  interface_ip.specific_tag        = 1;
@@ -941,6 +963,7 @@ LoadStoreU::LoadStoreU(ParseXML* XML_interface, int ithCore_, InputParameter* in
 	  area.set_area(area.get_area()+ LSQ->local_result.area);
 	  //output_data_csv(LSQ.LSQ.local_result);
 	  lsq_height=LSQ->local_result.cache_ht*sqrt(cdb_overhead);/*XML->sys.core[ithCore].number_hardware_threads*/
+
 
 	  if ((coredynp.core_ty==OOO) && (XML->sys.core[ithCore].load_buffer_size >0))
 	  {
@@ -1151,6 +1174,41 @@ RegFU::RegFU(ParseXML* XML_interface, int ithCore_, InputParameter* interface_ip
 		//output_data_csv(RFWIN.RF.local_result);
 	}
 
+  // ****************************** Dolma & STT extra bits in ALUs ************************************
+  // each alu has log2(ROB_size) of extra bits
+  nalus = 0; // by default this should be 0
+  if (XML->sys.stt || XML->sys.dolma) {
+    // should we move these shits to ALU?
+    // anyway we do not care about power of individual component...
+    nalus = XML->sys.core[ithCore].ALU_per_core + XML->sys.core[ithCore].FPU_per_core + XML->sys.core[ithCore].MUL_per_core;
+    stt_extrabit_alu = new ArrayST*[nalus];
+    for (int i = 0; i < nalus; i++) {
+      data							 = int(ceil(log2(XML->sys.core[ithCore].ROB_size)));
+      interface_ip.is_cache			 = false;
+      interface_ip.pure_cam            = false;
+      interface_ip.pure_ram            = true;
+      interface_ip.line_sz             = int(ceil(data/32.0))*4;
+      interface_ip.cache_sz            = interface_ip.line_sz * 1;
+      interface_ip.assoc               = 1;
+      interface_ip.nbanks              = 1;
+      interface_ip.out_w               = interface_ip.line_sz*8;
+      interface_ip.access_mode         = 1;
+      interface_ip.throughput          = 1.0/clockRate;
+      interface_ip.latency             = 1.0/clockRate;
+      interface_ip.obj_func_dyn_energy = 0;
+      interface_ip.obj_func_dyn_power  = 0;
+      interface_ip.obj_func_leak_power = 0;
+      interface_ip.obj_func_cycle_t    = 1;
+      interface_ip.num_rw_ports    = 1;
+      interface_ip.num_rd_ports    = 1;
+      interface_ip.num_wr_ports    = 1;
+      interface_ip.num_se_rd_ports = 0;
+      stt_extrabit_alu[i] = new ArrayST(&interface_ip, "STT Extrabit iALU", Core_device, coredynp.opt_local, coredynp.core_ty);
+      stt_extrabit_alu[i]->area.set_area(stt_extrabit_alu[i]->area.get_area() + stt_extrabit_alu[i]->local_result.area*coredynp.num_pipelines);
+      area.set_area(area.get_area() + stt_extrabit_alu[i]->local_result.area*coredynp.num_pipelines);
+    }
+  }
+    
 
  }
 
@@ -1387,6 +1445,14 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 
 	 *
 	 */
+
+   // for stt simulation
+   int stt_bit = 0;
+   if (XML->sys.stt || XML->sys.dolma) {
+     stt_bit += ceil(log2(XML->sys.core[ithCore].ROB_size)); // YRoT
+     stt_bit += ceil(log2(XML->sys.core[ithCore].ROB_size)); // AccessINstrIdx
+   }
+
 	if (!exist) return;
 	int  tag, data, out_w;
 //	interface_ip.wire_is_mat_type = 0;
@@ -1401,7 +1467,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 	{
 		if (coredynp.rm_ty ==RAMbased)
 		{	  //FRAT with global checkpointing (GCs) please see paper tech report for detailed explanation.
-			data							 = int(ceil(coredynp.phy_ireg_width*(1+coredynp.globalCheckpoint)/8.0));//33;
+			data							 = int(ceil((coredynp.phy_ireg_width*(1+coredynp.globalCheckpoint)+stt_bit)/8.0));//33;
 			out_w                            = int(ceil(coredynp.phy_ireg_width/8.0));//bytes
 			interface_ip.is_cache			 = false;
 			interface_ip.pure_cam            = false;
@@ -1427,7 +1493,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 			area.set_area(area.get_area()+ iFRAT->area.get_area());
 
 			//FRAT floating point
-			data							 = int(ceil(coredynp.phy_freg_width*(1+coredynp.globalCheckpoint)/8.0));
+			data							 = int(ceil((coredynp.phy_freg_width*(1+coredynp.globalCheckpoint)+stt_bit)/8.0));
 			out_w                            = int(ceil(coredynp.phy_freg_width/8.0));
 			interface_ip.is_cache			 = false;
 			interface_ip.pure_cam            = false;
@@ -1457,7 +1523,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 		{
 			//FRAT
 			tag							     = coredynp.arch_ireg_width +  coredynp.hthread_width;
-			data							 = int(ceil ((coredynp.arch_ireg_width+1*coredynp.globalCheckpoint )/8.0));//each checkpoint in the CAM-based RAT design needs only 1 bit, see "a power-aware hybrid ram-cam renaming mechanism for fast recovery"
+			data							 = int(ceil ((coredynp.arch_ireg_width+1*coredynp.globalCheckpoint +stt_bit)/8.0));//each checkpoint in the CAM-based RAT design needs only 1 bit, see "a power-aware hybrid ram-cam renaming mechanism for fast recovery"
 			out_w                            = int(ceil (coredynp.arch_ireg_width/8.0));
 			interface_ip.is_cache			 = true;
 			interface_ip.pure_cam            = false;
@@ -1487,7 +1553,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 
 			//FRAT for FP
 			tag							     = coredynp.arch_freg_width  +  coredynp.hthread_width;
-			data							 = int(ceil ((coredynp.arch_freg_width+1*coredynp.globalCheckpoint)/8.0));//each checkpoint in the CAM-based RAT design needs only 1 bit, see "a power-aware hybrid ram-cam renaming mechanism for fast recovery"
+			data							 = int(ceil ((coredynp.arch_freg_width+1*coredynp.globalCheckpoint +stt_bit)/8.0));//each checkpoint in the CAM-based RAT design needs only 1 bit, see "a power-aware hybrid ram-cam renaming mechanism for fast recovery"
 			out_w                            = int(ceil (coredynp.arch_freg_width/8.0));
 			interface_ip.is_cache			 = true;
 			interface_ip.pure_cam            = false;
@@ -1523,7 +1589,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 
 		if ((coredynp.rm_ty ==RAMbased) && (coredynp.globalCheckpoint<1))
 		{
-			data							 = int(ceil(coredynp.phy_ireg_width/8.0));
+			data							 = int(ceil((coredynp.phy_ireg_width)/8.0));
 			interface_ip.is_cache			 = false;
 			interface_ip.pure_cam            = false;
 			interface_ip.pure_ram            = true;
@@ -1548,7 +1614,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 			area.set_area(area.get_area()+ iRRAT->area.get_area());
 
 			//RRAT for FP
-			data							 = int(ceil(coredynp.phy_freg_width/8.0));
+			data							 = int(ceil((coredynp.phy_freg_width)/8.0));
 			interface_ip.is_cache			 = false;
 			interface_ip.pure_cam            = false;
 			interface_ip.pure_ram            = true;
@@ -1578,7 +1644,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 		//Recycle happens at two places: 1)when DCL check there are WAW, the Phy-registers/ROB directly recycles into freelist
 		// 2)When instruction commits the Phyregisters/ROB needed to be recycled.
 		//therefore num_wr port = decode-1(-1 means at least one phy reg will be used for the current renaming group) + commit width
-		data							 = int(ceil(coredynp.phy_ireg_width/8.0));
+		data							 = int(ceil((coredynp.phy_ireg_width)/8.0));
 		interface_ip.is_cache			 = false;
 		interface_ip.pure_cam            = false;
 		interface_ip.pure_ram            = true;
@@ -1604,7 +1670,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 		area.set_area(area.get_area()+ ifreeL->area.get_area());
 
 		//freelist for FP
-		data							 = int(ceil(coredynp.phy_freg_width/8.0));
+		data							 = int(ceil((coredynp.phy_freg_width)/8.0));
 		interface_ip.is_cache			 = false;
 		interface_ip.pure_cam            = false;
 		interface_ip.pure_ram            = true;
@@ -1635,7 +1701,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 	else if (coredynp.scheu_ty==ReservationStation){
 		if (coredynp.rm_ty ==RAMbased){
 
-			data							 = int(ceil(coredynp.phy_ireg_width*(1+coredynp.globalCheckpoint)/8.0));
+			data							 = int(ceil((coredynp.phy_ireg_width*(1+coredynp.globalCheckpoint)+stt_bit)/8.0));
 			out_w                            = int(ceil(coredynp.phy_ireg_width/8.0));//GC does not need to be readout
 			interface_ip.is_cache			 = false;
 			interface_ip.pure_cam            = false;
@@ -1664,7 +1730,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 			area.set_area(area.get_area()+ iFRAT->area.get_area());
 
 			//FP
-			data							 = int(ceil(coredynp.phy_freg_width*(1+coredynp.globalCheckpoint)/8.0));
+			data							 = int(ceil((coredynp.phy_freg_width*(1+coredynp.globalCheckpoint)+stt_bit)/8.0));
 			out_w                            = int(ceil(coredynp.phy_freg_width/8.0));
 			interface_ip.is_cache			 = false;
 			interface_ip.pure_cam            = false;
@@ -1697,7 +1763,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 		{
 			//FRAT
 			tag							     = coredynp.arch_ireg_width  +  coredynp.hthread_width;
-			data							 = int(ceil ((coredynp.arch_ireg_width+1*coredynp.globalCheckpoint)/8.0));
+			data							 = int(ceil ((coredynp.arch_ireg_width+1*coredynp.globalCheckpoint+stt_bit)/8.0));
 			out_w                            = int(ceil (coredynp.arch_ireg_width/8.0));//GC bits does not need to be sent out
 			interface_ip.is_cache			 = true;
 			interface_ip.pure_cam            = false;
@@ -1727,7 +1793,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 
 			//FRAT
 			tag							     = coredynp.arch_freg_width  +  coredynp.hthread_width;
-			data							 = int(ceil ((coredynp.arch_freg_width+1*coredynp.globalCheckpoint)/8.0));//the address of CAM needed to be sent out
+			data							 = int(ceil ((coredynp.arch_freg_width+1*coredynp.globalCheckpoint+stt_bit)/8.0));//the address of CAM needed to be sent out
 			out_w                            = int(ceil (coredynp.arch_freg_width/8.0));
 			interface_ip.is_cache			 = true;
 			interface_ip.pure_cam            = false;
@@ -1760,7 +1826,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 
 		if ((coredynp.rm_ty ==RAMbased) && (coredynp.globalCheckpoint<1))
 				{
-					data							 = int(ceil(coredynp.phy_ireg_width/8.0));
+					data							 = int(ceil((coredynp.phy_ireg_width)/8.0));
 					interface_ip.is_cache			 = false;
 					interface_ip.pure_cam            = false;
 					interface_ip.pure_ram            = true;
@@ -1785,7 +1851,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 					area.set_area(area.get_area()+ iRRAT->area.get_area());
 
 					//RRAT for FP
-					data							 = int(ceil(coredynp.phy_freg_width/8.0));
+					data							 = int(ceil((coredynp.phy_freg_width)/8.0));
 					interface_ip.is_cache			 = false;
 					interface_ip.pure_cam            = false;
 					interface_ip.pure_ram            = true;
@@ -1811,7 +1877,7 @@ RENAMINGU::RENAMINGU(ParseXML* XML_interface, int ithCore_, InputParameter* inte
 				}
 
 		//Freelist of renaming unit of RS based OOO is unifed for both int and fp renaming unit since the ROB is unified
-		data							 = int(ceil(coredynp.phy_ireg_width/8.0));
+		data							 = int(ceil((coredynp.phy_ireg_width)/8.0));
 		interface_ip.is_cache			 = false;
 		interface_ip.pure_cam            = false;
 		interface_ip.pure_ram            = true;
@@ -3630,6 +3696,16 @@ void RegFU::computeEnergy(bool is_tdp)
         	RFWIN->stats_t.writeAc.access  = 0;//0.5*RFWIN->l_ip.num_rw_ports;
         	RFWIN->tdp_stats = RFWIN->stats_t;
     	}
+
+      // stt only
+      for (int i = 0; i < nalus; i++) {
+        // assume accesses are equally distributed into all ALUs
+        stt_extrabit_alu[i]->stats_t.readAc.access = coredynp.issueW*2*(coredynp.ALU_duty_cycle*1.1+
+    			(coredynp.num_muls>0?coredynp.MUL_duty_cycle:0))*coredynp.num_pipelines/nalus;
+        stt_extrabit_alu[i]->stats_t.writeAc.access = coredynp.issueW*2*(coredynp.ALU_duty_cycle*1.1+
+    			(coredynp.num_muls>0?coredynp.MUL_duty_cycle:0))*coredynp.num_pipelines/nalus;
+        stt_extrabit_alu[i]->tdp_stats = stt_extrabit_alu[i]->stats_t;
+      }
      }
     else
     {
@@ -3659,6 +3735,13 @@ void RegFU::computeEnergy(bool is_tdp)
    	             XML->sys.core[ithCore].function_calls*16;;
         	FRF->rtp_stats = FRF->stats_t;
     	}
+
+      // stt only
+      for (int i = 0; i < nalus; i++) {
+        stt_extrabit_alu[i]->stats_t.readAc.access = (XML->sys.core[ithCore].ialu_accesses + XML->sys.core[ithCore].fpu_accesses + XML->sys.core[ithCore].mul_accesses)/nalus;
+        stt_extrabit_alu[i]->stats_t.writeAc.access = (XML->sys.core[ithCore].ialu_accesses + XML->sys.core[ithCore].fpu_accesses + XML->sys.core[ithCore].mul_accesses)/nalus;
+        stt_extrabit_alu[i]->rtp_stats = stt_extrabit_alu[i]->stats_t;
+      }
     }
 	IRF->power_t.reset();
 	FRF->power_t.reset();
@@ -3673,6 +3756,14 @@ void RegFU::computeEnergy(bool is_tdp)
 				RFWIN->stats_t.writeAc.access*RFWIN->local_result.power.writeOp.dynamic);
 	}
 
+  // stt only
+  for (int i = 0; i < nalus; i++) {
+    stt_extrabit_alu[i]->power_t.reset();
+    stt_extrabit_alu[i]->power_t.readOp.dynamic += 
+      (stt_extrabit_alu[i]->stats_t.readAc.access * stt_extrabit_alu[i]->local_result.power.readOp.dynamic +
+       stt_extrabit_alu[i]->stats_t.writeAc.access * stt_extrabit_alu[i]->local_result.power.writeOp.dynamic);
+  }
+
 	if (is_tdp)
 	{
 		IRF->power  =  IRF->power_t + ((coredynp.scheu_ty==ReservationStation) ? (IRF->local_result.power *coredynp.pppm_lkg_multhread):IRF->local_result.power);
@@ -3683,17 +3774,31 @@ void RegFU::computeEnergy(bool is_tdp)
 			RFWIN->power = RFWIN->power_t + RFWIN->local_result.power *pppm_lkg;
 			power        = power + RFWIN->power;
 		}
+
+    // stt only
+    for (int i = 0; i < nalus; i++) {
+      stt_extrabit_alu[i]->power = stt_extrabit_alu[i]->power_t + stt_extrabit_alu[i]->local_result.power;
+      power = power + stt_extrabit_alu[i]->power;
+    }
 	}
 	else
 	{
 		IRF->rt_power  =  IRF->power_t + ((coredynp.scheu_ty==ReservationStation) ? (IRF->local_result.power *coredynp.pppm_lkg_multhread):IRF->local_result.power);
 		FRF->rt_power  =  FRF->power_t + ((coredynp.scheu_ty==ReservationStation) ? (FRF->local_result.power *coredynp.pppm_lkg_multhread):FRF->local_result.power);
-		rt_power	   =  rt_power + (IRF->power_t + FRF->power_t);
+    // actually Jiacheng really believe this line is wrong, so he changed it...
+		// rt_power	   =  rt_power + (IRF->power_t + FRF->power_t);
+		rt_power	   =  rt_power + (IRF->rt_power + FRF->rt_power);
 		if (coredynp.regWindowing)
 		{
 			RFWIN->rt_power = RFWIN->power_t + RFWIN->local_result.power *pppm_lkg;
 			rt_power        = rt_power + RFWIN->rt_power;
 		}
+
+    // stt only...
+    for (int i = 0; i < nalus; i++) {
+      stt_extrabit_alu[i]->rt_power = stt_extrabit_alu[i]->power_t + stt_extrabit_alu[i]->local_result.power;
+      rt_power = rt_power + stt_extrabit_alu[i]->rt_power;
+    }
 	}
 }
 

@@ -598,6 +598,11 @@ typedef struct{
   // 0: normal mode
   // 1: with dolma protection
   int dolma;
+
+  // support for stt power evaluation
+  // 0: normal mode
+  // 1: with stt protection
+  int stt;
 } root_system;
 
 class ParseXML

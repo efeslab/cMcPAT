@@ -195,6 +195,9 @@ class RegFU :public Component {
 	ArrayST * RFWIN;
 	bool exist;
 
+  int nalus;
+  ArrayST ** stt_extrabit_alu;
+
 	RegFU(ParseXML *XML_interface, int ithCore_, InputParameter* interface_ip_,const CoreDynParam & dyn_p_, bool exist_=true);
     void computeEnergy(bool is_tdp=true);
     void displayEnergy(uint32_t indent = 0,int plevel = 100, bool is_tdp=true);
