@@ -3700,9 +3700,12 @@ void RegFU::computeEnergy(bool is_tdp)
       // stt only
       for (int i = 0; i < nalus; i++) {
         // assume accesses are equally distributed into all ALUs
-        stt_extrabit_alu[i]->stats_t.readAc.access = coredynp.issueW*2*(coredynp.ALU_duty_cycle*1.1+
+        // Jiacheng guesses that there's no 1.1, and he then copied everything from IRF.
+        // He also assumes that accesses are evenly distributed to each ALU.
+        // anyway do we care about tdp?
+        stt_extrabit_alu[i]->stats_t.readAc.access = coredynp.issueW*2*(coredynp.ALU_duty_cycle+
     			(coredynp.num_muls>0?coredynp.MUL_duty_cycle:0))*coredynp.num_pipelines/nalus;
-        stt_extrabit_alu[i]->stats_t.writeAc.access = coredynp.issueW*2*(coredynp.ALU_duty_cycle*1.1+
+        stt_extrabit_alu[i]->stats_t.writeAc.access = coredynp.issueW*2*(coredynp.ALU_duty_cycle+
     			(coredynp.num_muls>0?coredynp.MUL_duty_cycle:0))*coredynp.num_pipelines/nalus;
         stt_extrabit_alu[i]->tdp_stats = stt_extrabit_alu[i]->stats_t;
       }
@@ -3738,6 +3741,7 @@ void RegFU::computeEnergy(bool is_tdp)
 
       // stt only
       for (int i = 0; i < nalus; i++) {
+        // each AFU/FPU/MUL access will have 1 read and 1 write
         stt_extrabit_alu[i]->stats_t.readAc.access = (XML->sys.core[ithCore].ialu_accesses + XML->sys.core[ithCore].fpu_accesses + XML->sys.core[ithCore].mul_accesses)/nalus;
         stt_extrabit_alu[i]->stats_t.writeAc.access = (XML->sys.core[ithCore].ialu_accesses + XML->sys.core[ithCore].fpu_accesses + XML->sys.core[ithCore].mul_accesses)/nalus;
         stt_extrabit_alu[i]->rtp_stats = stt_extrabit_alu[i]->stats_t;
